@@ -31,7 +31,7 @@
     </thead>
     <tbody></tbody>
   </table>
-<button class="delete-btn" disabled>삭제</button>
+
 
   <div id="detailModal" class="modal" style="display: none;">
     <div class="modal-content">
@@ -39,31 +39,19 @@
       <pre id="detailContent"></pre>
     </div>
   </div>
+
+ <h2 style="margin-top:60px;">📊 평균 매트릭스 (질문항목 × 평가항목)</h2>
+<div id="avgMatrix"></div>
+
+<h2 style="margin-top:28px;">📋 평가 항목별 (개별 점수)</h2>
+<div id="criteriaChips" style="margin: 8px 0 12px; display:flex; gap:8px; flex-wrap:wrap;"></div>
+<div id="longTable"></div>
 
   <script type="module" src="script.js"></script>
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 
 </body>
 </html>
-
-  <table id="resultsTable">
-    <thead>
-      <tr>
-        <th>이름</th><th>주제</th><th>평균 별점</th><th>상세보기</th>
-      
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-  
-<button class="delete-btn" disabled>삭제</button>
-
-  <div id="detailModal" class="modal" style="display: none;">
-    <div class="modal-content">
-      <span id="closeModal">&times;</span>
-      <pre id="detailContent"></pre>
-    </div>
-  </div>
 
   <script type="module" src="script.js"></script>
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
