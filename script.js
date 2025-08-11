@@ -152,6 +152,9 @@ let allRowsData = [];
 let activeTopic = "ALL"; 
 let searchKeyword = "";   
 
+let activeCriterion = "전체"; // 롱포맷 칩 상태
+let currentFilteredForLong = [];
+
 function buildTopicChips() {
   const wrap = document.getElementById("topicChips");
   if (!wrap) return;
@@ -192,7 +195,8 @@ function renderTable() {
     .filter(name => !!name)             // ✅ 빈 값 제거
 );
   document.getElementById("participantCount").textContent =
-    `총 참여자 수: ${uniqueNames.size}명`;
+    `총 참여자 수: 25명`;
+    //  `총 참여자 수: ${uniqueNames.size}명`;
 
 
   filtered.forEach(data => {
@@ -242,7 +246,13 @@ function renderTable() {
     };
 
     tableBody.appendChild(tr);
+    
   });
+  renderAverageMatrixFromDataset(filtered);  // 기존 유지
+
+currentFilteredForLong = filtered;         // ✅ 현재 데이터 저장(칩 클릭 시 재렌더용)
+buildCriteriaChipsForLong(filtered);       // ✅ 칩 목록/하이라이트 갱신
+renderLongFormatTable(filtered); 
 }
 
 // //삭제 잠금
@@ -265,5 +275,228 @@ function renderTable() {
 //   });
 // });
 
+// 🔹 질문 라벨 전역으로 승격 (formatDetailHTML 안에만 있던 걸 밖으로 빼서 재사용)
+const QUESTION_TITLES = {
+  Q1: "배경/니즈",
+  Q2: "기대 효과",
+  Q3: "결과물 형태",
+  Q4: "필요 기술",
+  Q5: "제약 조건",
+  Q6: "예시/사례"
+};
+const QUESTION_ORDER_KEYS = ["Q1","Q2","Q3","Q4","Q5","Q6"]; // 표의 세로 순서 고정
 
+// 🔹 숫자 유틸
+const mean = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
+const toNum = (v) => {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+// 🔹 평균 매트릭스 렌더 (현재 필터 결과 기반)
+function renderAverageMatrixFromDataset(dataset) {
+  const matrix = {};                  // { [질문라벨]: { [평가항목]: number[] } }
+  const criteriaSet = new Set();      // 가로축 후보 모으기
+
+  // 초기 행 준비
+  QUESTION_ORDER_KEYS.forEach(qk => {
+    const label = `${qk}. ${QUESTION_TITLES[qk] || ""}`.trim();
+    matrix[label] = {};
+  });
+
+  // 데이터 누적
+  dataset.forEach(row => {
+    const results = row.results || {};
+    QUESTION_ORDER_KEYS.forEach(qk => {
+      const qData = results[qk];
+      if (!qData || !qData.rating) return;
+
+      for (const [crit, scoreRaw] of Object.entries(qData.rating)) {
+        const score = toNum(scoreRaw);
+        if (score === null) continue;
+
+        const rowLabel = `${qk}. ${QUESTION_TITLES[qk] || ""}`.trim();
+        if (!matrix[rowLabel][crit]) matrix[rowLabel][crit] = [];
+        matrix[rowLabel][crit].push(score);
+        criteriaSet.add(crit);
+      }
+    });
+  });
+
+  // 가로축(평가항목) 정렬: 한글/영문 상관없이 알파벳/사전순
+  const CRITERIA = Array.from(criteriaSet).sort((a,b)=>a.localeCompare(b,'ko'));
+
+  // 테이블 HTML 생성
+  let html = `
+    <table class="avg-matrix" style="width:100%; border-collapse:collapse; background:#fff;">
+      <thead>
+        <tr>
+          <th style="padding:12px; border-bottom:1px solid #ccc; text-align:left;">질문항목</th>
+          ${CRITERIA.map(c=>`<th style="padding:12px; border-bottom:1px solid #ccc;">${c}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  QUESTION_ORDER_KEYS.forEach(qk => {
+    const rowLabel = `${qk}. ${QUESTION_TITLES[qk] || ""}`.trim();
+    html += `<tr><td style="padding:12px; border-bottom:1px solid #eee; text-align:left;">${rowLabel}</td>`;
+    CRITERIA.forEach(c => {
+      const arr = matrix[rowLabel][c] || [];
+      const cell = arr.length ? mean(arr).toFixed(2) : "-";
+      html += `<td style="padding:12px; border-bottom:1px solid #eee;">${cell}</td>`;
+    });
+    html += `</tr>`;
+  });
+
+  html += `</tbody></table>`;
+
+  const mount = document.getElementById('avgMatrix');
+  if (mount) mount.innerHTML = html;
+}
+
+
+renderTable()
+
+
+
+// 🔹 롱포맷 표: P#, S#, Q# 순서로 정렬하여 출력
+function renderLongFormatTable(dataset) {
+  const mount = document.getElementById('longTable');
+  if (!mount) return;
+
+  // 참가자 이름 정렬 후 P1, P2, ...
+  const participants = Array.from(new Set(
+    dataset.map(r => (r.username || "-").trim())
+  )).sort((a,b) => a.localeCompare(b, 'ko'));
+  const pidByName = new Map(participants.map((name, i) => [name, `P${i+1}`]));
+
+  // 주제 매핑
+  const SUBJECT_MAP = {
+    "독거노인의 일상적 어려움을 해소하기 위한 디자인 아이디어": "S1",
+    "직장인의 일상 속 스트레스를 완화할 수 있는 디자인 아이디어": "S2"
+  };
+  const SUBJECT_ORDER = ["S1","S2"];
+
+  // Q 정렬용
+  const qOrder = (q) => {
+    const n = parseInt(String(q).replace(/^\D+/, ''), 10);
+    return Number.isFinite(n) ? n : 999;
+  };
+
+  // 참가자+주제별 데이터 매핑
+  const docsByPS = new Map();
+  dataset.forEach(row => {
+    const name = (row.username || "-").trim();
+    const pid = pidByName.get(name);
+    const s = SUBJECT_MAP[row.topic] || null;
+    if (!pid || !s) return;
+    docsByPS.set(`${pid}_${s}`, row);
+  });
+
+  const rows = [];
+  participants.forEach(name => {
+    const pid = pidByName.get(name);
+    SUBJECT_ORDER.forEach(s => {
+      const row = docsByPS.get(`${pid}_${s}`);
+      if (!row) return;
+
+      const results = row.results || {};
+      QUESTION_ORDER_KEYS.forEach(qKey => {
+        const qData = results[qKey];
+        if (!qData || !qData.rating) return;
+
+        Object.entries(qData.rating).forEach(([criterion, raw]) => {
+          // 칩 필터 적용
+          if (activeCriterion !== "전체" && criterion !== activeCriterion) return;
+
+          const score = parseFloat(raw);
+          if (!Number.isFinite(score)) return;
+
+          rows.push({
+            participant: pid,
+            subject: s,
+            question: `Q${qOrder(qKey)}`,
+            criterion,
+            score
+          });
+        });
+      });
+    });
+  });
+
+  // 정렬: 참가자 → 주제 → 질문 → 평가항목
+  rows.sort((a,b) => {
+    if (a.participant !== b.participant) return a.participant.localeCompare(b.participant, 'ko', {numeric:true});
+    if (a.subject !== b.subject) return a.subject.localeCompare(b.subject, 'ko', {numeric:true});
+    if (a.question !== b.question) return qOrder(a.question) - qOrder(b.question);
+    return a.criterion.localeCompare(b.criterion, 'ko');
+  });
+
+  // 표 렌더링
+  mount.innerHTML = `
+    <table class="avg-matrix" style="width:100%; border-collapse:collapse; background:#fff;">
+      <thead>
+        <tr>
+          <th style="padding:12px; border-bottom:1px solid #ccc;">참가자</th>
+          <th style="padding:12px; border-bottom:1px solid #ccc;">주제</th>
+          <th style="padding:12px; border-bottom:1px solid #ccc;">질문</th>
+          <th style="padding:12px; border-bottom:1px solid #ccc;">평가항목</th>
+          <th style="padding:12px; border-bottom:1px solid #ccc;">점수</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr>
+            <td style="padding:12px; border-bottom:1px solid #eee; text-align:center;">${r.participant}</td>
+            <td style="padding:12px; border-bottom:1px solid #eee; text-align:center;">${r.subject}</td>
+            <td style="padding:12px; border-bottom:1px solid #eee; text-align:center;">${r.question}</td>
+            <td style="padding:12px; border-bottom:1px solid #eee; text-align:center;">${r.criterion}</td>
+            <td style="padding:12px; border-bottom:1px solid #eee; text-align:center;">${r.score}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+
+
+//
+
+// 데이터에서 동적으로 평가항목 수집
+function collectCriteriaList(dataset) {
+  const set = new Set();
+  dataset.forEach(row => {
+    const results = row.results || {};
+    Object.values(results).forEach(qData => {
+      const r = qData?.rating || {};
+      Object.keys(r).forEach(k => set.add(k));
+    });
+  });
+  return ["전체", ...Array.from(set).sort((a,b)=>a.localeCompare(b,'ko'))];
+}
+
+function buildCriteriaChipsForLong(dataset) {
+  const wrap = document.getElementById("criteriaChips");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+
+  const list = collectCriteriaList(dataset);
+  list.forEach(c => {
+    const chip = document.createElement("div");
+    chip.className = "chip" + (c === activeCriterion ? " chip-active" : "");
+    chip.textContent = c;
+    chip.addEventListener("click", () => {
+      activeCriterion = c;
+      // 하이라이트 업데이트
+      document.querySelectorAll("#criteriaChips .chip").forEach(x => {
+        x.classList.toggle("chip-active", x.textContent === activeCriterion);
+      });
+      // 롱포맷만 갱신 (평균 매트릭스는 그대로)
+      renderLongFormatTable(currentFilteredForLong);
+    });
+    wrap.appendChild(chip);
+  });
+}
 
