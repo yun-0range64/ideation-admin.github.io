@@ -164,3 +164,17 @@ input:checked + .slider {
 input:checked + .slider:before {
   transform: translateX(24px);
 }
+
+/* 평균 매트릭스 임계 하이라이트 */
+.avg-matrix td.high-blue{
+  background: #e6f4ff;
+  color: #0958d9;
+  font-weight: 600;
+  box-shadow: inset 0 0 0 2px #69b1ff;
+}
+.avg-matrix td.low-red{
+  background: #fff1f0;
+  color: #cf1322;
+  font-weight: 600;
+  box-shadow: inset 0 0 0 2px #ff7875;
+}
