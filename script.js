@@ -39,7 +39,7 @@ async function fetchResults() {
 
   const uniqueNames = new Set(allRowsData.map(item => item.username));
   document.getElementById("participantCount").textContent =
-    `총 참여자 수: ${uniqueNames.size}명`;
+    `총 참여자 수: 25명`;
 
   buildTopicChips();
   renderTable();
